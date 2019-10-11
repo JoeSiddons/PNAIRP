@@ -1,0 +1,82 @@
+library(tidytext)
+library(stringr)
+library(dplyr)
+
+##Define stop words
+stop_words <- stop_words %>% filter(lexicon == "SMART")
+custom_stop_words <- tibble(word = c("Pitcher", "Tiatragul", "Emma", "Finn", "Margarett", "pitcher", "emma", "finn", 
+                                     "marge", "Alison", "alison", "Jackie", "jackie", "Ruby", "ruby", "Sam", "Paul", 
+                                     "Jack", "Breese", "2nd", "margarett", "margaret", "margarette", "margrett", "qaqish"
+                                     , "vanderweyst", "allison", "baker", "madonna", "2017", "26", "9", "baca", "alec", "ruby's",
+                                     "sam", "samuel", "mcewan", "10", "sammy", "paul", "friehoffer", "jack", "breese", "hes", "4th", 
+                                     "brees", "semling", "shes", "Tre", "gu", "GU", "Gonzaga", "zag", "zags", "gonzaga", "tre", "ra",
+                                    'tally','haley','nash','morgan','josh','daisy','lia','julian','jessie','cassie','marlin','liza',
+                                    'jordan','sophia','rob','jonathan','ben','ian','melina','quinn','caitlin','henry','sp','jess',
+                                    'emily','madison','andrew','suzanna','luke','peter','alek','ariel','keely','holly','taylor','moorea',
+                                    'caylie','jeffrey','tyler','keara','kelsey','seckington','rachel','ben','gibson','zach','kevin','anna',
+                                    'christa','renne','abby','taylor','makena','ziels','keriann','cunningham','sanchez','remi','casey',
+                                    'matt','wong','dooley','boone','jones','heron', 'gemmet','chardin','mueller','jeffery','matthew',
+                                    'graves','corkery','moran','robert','lee','lisa','chardin','ellis','levine', 'dussault', 'fowler',
+                                    'lazo','11','1','llc', 'desmet','university','mario','moreno'))
+
+
+
+##Change 'sick' value to +2 from -2
+
+sentiments[sentiments$word == "sick",]
+sentiments$score[sentiments$word == "sick"] <- as.integer(2)
+sentiments[sentiments$word == "sick",]
+
+##Write function to loop through and retrive sentiment score for each response
+
+read_sentiment <- function(df, x, n){
+  sentiment <- list()
+  for(i in 1:nrow(df)){sentiment[i] <- df[i,n] %>% unnest_tokens_("word", x) %>%
+    anti_join(stop_words, by = 'word') %>% anti_join(custom_stop_words, by = c("word" = "word")) %>%
+    inner_join(sentiments, by = c("word" = "word")) %>% summarise(sentiment=mean(score))}
+  sentiment <- replace(sentiment, is.na(sentiment), 0)
+  return(sentiment)
+}
+
+
+##Get Top 10 scores by RA
+
+scores <- read_sentiment(df, "response", 3)
+scores <- as.matrix(scores)
+scores <- cbind(df, scores)
+scores$scores <- vapply(scores$scores, paste, collapse = ", ", character(1L))
+scores$scores <- as.double(scores$scores)
+avg_scores <- scores %>% group_by(ra) %>% summarise(avg_sentiment = mean(scores, na.rm = TRUE)) %>%
+  select(ra, avg_sentiment) %>% arrange(desc(avg_sentiment))
+head(avg_scores)
+
+top_ten_scores <- top_n(avg_scores, 10, avg_sentiment)
+
+
+##Topic modeling
+
+words <- df %>% unnest_tokens(word, response) %>% anti_join(stop_words, by = c("word" = "word")) %>%
+  anti_join(custom_stop_words, by = c("word" = "word")) %>% count(ra, word) %>% ungroup()
+
+
+total_words <- words %>% group_by(ra) %>% summarise(total = sum(n))
+
+words <- left_join(words, total_words)
+
+tf_idf <- words %>%
+  bind_tf_idf(word, ra, n) %>%
+  select(-total) %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word))))
+
+
+
+
+
+
+
+
+
+
+
+
